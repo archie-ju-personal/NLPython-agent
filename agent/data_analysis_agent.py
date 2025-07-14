@@ -41,9 +41,13 @@ def execute_code(code: str) -> str:
     return json.dumps(result, indent=2, default=str)
 
 @tool
-def create_visualization(viz_type: str, **kwargs) -> str:
-    """Create visualizations for the dataset. Supported types: correlation_heatmap, scatter_plot, histogram."""
-    result = dataset_tools.create_visualization(viz_type, **kwargs)
+def create_visualization(code: str) -> str:
+    """Execute Python code to create a visualization. The code should generate a plot using matplotlib/seaborn/plotly, and the resulting image will be returned as PNG bytes."""
+    import base64
+    result = dataset_tools.create_visualization(code)
+    if result['success'] and 'plot_data' in result:
+        # Convert bytes to base64 string for JSON serialization
+        result['plot_data'] = base64.b64encode(result['plot_data']).decode('utf-8')
     return json.dumps(result, indent=2)
 
 @tool
@@ -67,31 +71,26 @@ Available tools:
 - load_dataset: Load a dataset (currently supports 'iris')
 - get_dataset_info: Get information about the current dataset
 - execute_code: Execute Python code on the dataset (available as 'df')
-- create_visualization: Create visualizations (correlation_heatmap, scatter_plot, histogram)
+- create_visualization: Execute Python code to create a visualization (provide the code as a string; the code should generate a plot using matplotlib/seaborn/plotly, and the resulting image will be returned as PNG bytes)
 - get_execution_history: Get history of executed code
 
 When the user asks for analysis, you should:
 1. First load the dataset if not already loaded
 2. Get dataset information to understand the structure
 3. Write and execute Python code to perform the requested analysis
-4. Create visualizations if requested
+4. Write and execute Python code to create visualizations if requested (using the create_visualization tool)
 5. Provide clear explanations of your findings
 
-IMPORTANT: For the Iris dataset, use these exact column names:
-- 'sepal length (cm)' (not 'sepal_length')
-- 'sepal width (cm)' (not 'sepal_width')
-- 'petal length (cm)' (not 'petal_length')
-- 'petal width (cm)' (not 'petal_width')
-- 'species' (for the target column)
-
 CRITICAL: Always use print() statements to display results. For example:
-- Use: print(df['sepal width (cm)'].mean())
-- NOT: df['sepal width (cm)'].mean()
+- Use: print(df['column_name'].mean())
+- NOT: df['column_name'].mean()
 
-This ensures the output is captured and displayed to the user.
+IMPORTANT: You can use import statements for any library you need. Common libraries are pre-loaded:
+- pandas (pd), numpy (np), matplotlib (plt), seaborn (sns), plotly (px, go), scikit-learn
+- You can also import additional libraries as needed
 
 Always write safe, well-documented Python code. The dataset is available as 'df' in your code.
-Use pandas, numpy, matplotlib, seaborn, and scikit-learn for analysis."""
+Use the pre-loaded libraries: pandas (pd), numpy (np), matplotlib (plt), seaborn (sns), plotly (px, go), and scikit-learn."""
 
     # Run the agent
     result = app.invoke({

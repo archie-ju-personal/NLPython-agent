@@ -43,9 +43,19 @@ def test_basic_functionality():
     
     # Test 4: Create visualization
     print("\n4. Testing visualization creation...")
-    viz_result = dataset_tools.create_visualization("correlation_heatmap")
+    viz_code = '''
+plt.figure(figsize=(10, 6))
+plt.hist(df['petal width (cm)'], bins=20, alpha=0.7, edgecolor='black')
+plt.title('Distribution of Petal Width')
+plt.xlabel('Petal Width (cm)')
+plt.ylabel('Frequency')
+plt.grid(True, alpha=0.3)
+print("Histogram created successfully")
+'''
+    viz_result = dataset_tools.create_visualization(viz_code)
     if viz_result['success']:
         print("✅ Visualization created successfully")
+        print(f"   Output: {viz_result['output']}")
     else:
         print(f"❌ Visualization failed: {viz_result['message']}")
         return False

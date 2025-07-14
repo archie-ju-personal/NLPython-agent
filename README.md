@@ -2,194 +2,234 @@
 
 An intelligent AI agent that translates natural language commands into executable Python code for dataset analysis. Built with LangGraph and OpenAI, this agent can analyze datasets, create visualizations, and perform machine learning tasks using simple English commands.
 
-## Features
-
-- **Natural Language Interface**: Ask for data analysis in plain English
-- **Safe Code Execution**: Secure Python code execution with safety checks
-- **Multiple Dataset Support**: Currently supports Iris dataset, extensible for others
-- **Rich Visualizations**: Create correlation heatmaps, scatter plots, histograms
-- **Machine Learning**: Train models and perform predictions
-- **LangGraph Studio Integration**: Visualize and monitor agent workflow
-- **Interactive CLI**: Test and interact with the agent directly
-
-## Quick Start
+## 🚀 Quick Start
 
 ### 1. Install Dependencies
-
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Test the Agent
+### 2. Set Up Configuration
+Create a `config.py` file with your OpenAI API key:
+```python
+OPENAI_API_KEY = "your-api-key-here"
+MODEL_NAME = "gpt-4-turbo-preview"
+TEMPERATURE = 0.1
+```
 
+### 3. Start the Interactive CLI
 ```bash
-# Run a quick test
-python cli.py test
-
-# Start interactive chat
 python cli.py chat
-
-# Run a full demonstration
-python cli.py demo
 ```
 
-### 3. Example Queries
+This is the **main entry point** for the project. The CLI provides an interactive interface where you can:
+- Ask natural language questions about your data
+- Generate visualizations that automatically open in your browser
+- View dataset information and analysis results
 
-Try these natural language commands:
-
-```bash
-# Load and explore the dataset
-"Load the iris dataset and show me basic statistics"
-
-# Create visualizations
-"Create a correlation heatmap"
-"Show me a scatter plot of sepal length vs sepal width"
-
-# Machine learning
-"Train a logistic regression model to predict species"
-
-# Data analysis
-"Show me the distribution of petal length by species"
-"Calculate the mean and standard deviation of all numeric columns"
-```
-
-## Project Structure
+## 📁 Project Structure
 
 ```
+├── cli.py                    # 🎯 MAIN ENTRY POINT - Interactive CLI
+├── webview.py                # 🌐 Web server for visualization display
 ├── agent/
-│   └── data_analysis_agent.py    # Main LangGraph agent
+│   ├── __init__.py
+│   └── data_analysis_agent.py  # LangGraph agent implementation
 ├── tools/
-│   └── dataset_tools.py          # Dataset operations and code execution
-├── cli.py                        # Interactive CLI interface
-├── langgraph_studio.py           # LangGraph Studio integration
-├── config.py                     # Configuration settings
-├── requirements.txt              # Python dependencies
-└── README.md                    # This file
+│   ├── __init__.py
+│   └── dataset_tools.py        # Dataset operations & safe code execution
+├── static/                    # 📊 Generated visualizations
+├── data/                      # 📁 Dataset storage
+├── config.py                  # ⚙️ Configuration settings
+├── requirements.txt           # 📦 Python dependencies
+├── test_agent.py             # 🧪 Comprehensive test suite
+├── verification.ipynb         # 📓 Development notebook
+└── README.md                 # 📖 This file
 ```
 
-## LangGraph Studio Integration
+## 🔗 File Relationships & User Connection Points
 
-To visualize your agent workflow in LangGraph Studio:
+### Primary User Interface
+- **`cli.py`** ← **MAIN ENTRY POINT** for users
+  - Provides interactive chat interface
+  - Automatically starts web server for visualizations
+  - Opens browser to display plots
+  - Imports: `agent.data_analysis_agent`, `tools.dataset_tools`
 
-1. **Install LangGraph CLI**:
-   ```bash
-   pip install langgraph-cli
-   ```
+### Core Components
+- **`agent/data_analysis_agent.py`** ← LangGraph agent logic
+  - Defines the AI agent workflow
+  - Imports: `tools.dataset_tools`, `config`
+  - Used by: `cli.py`, `test_agent.py`
 
-2. **Start LangGraph Studio**:
-   ```bash
-   langgraph dev langgraph_studio.py
-   ```
+- **`tools/dataset_tools.py`** ← Dataset operations & code execution
+  - Safe Python code execution
+  - Dataset loading and manipulation
+  - Visualization generation
+  - Used by: `agent/data_analysis_agent.py`
 
-3. **Access the Studio**:
-   Open your browser to `http://localhost:8123` to see the agent workflow visualization.
+### Web Visualization
+- **`webview.py`** ← Flask web server
+  - Serves visualizations at `http://localhost:8080/`
+  - Automatically started by CLI when visualizations are created
+  - Displays plots from `static/last_plot.png`
 
-## Available Tools
+### Configuration & Testing
+- **`config.py`** ← API keys and settings
+  - Used by: `agent/data_analysis_agent.py`
+- **`test_agent.py`** ← Comprehensive testing
+  - Tests all agent functionality
+  - Used for: Development and debugging
+
+## 🎯 How to Use
+
+### Interactive Mode (Recommended)
+```bash
+python cli.py chat
+```
+Then ask questions like:
+- "Load the iris dataset and show me basic statistics"
+- "Create a scatter plot of sepal length vs sepal width"
+- "Train a logistic regression model to predict species"
+
+### Test the Agent
+```bash
+python test_agent.py
+```
+
+### Manual Web Server (if needed)
+```bash
+python webview.py
+```
+Then visit `http://localhost:8080/` in your browser.
+
+## 🌟 Key Features
+
+### Automatic Visualization Display
+When you request a visualization:
+1. **Agent generates the plot** using Python code
+2. **Plot is saved** to `static/last_plot.png`
+3. **Web server starts automatically** on port 8080
+4. **Browser opens automatically** to display the plot
+5. **No manual intervention required**
+
+### Natural Language Interface
+Ask for analysis in plain English:
+- "Show me the distribution of petal width"
+- "Create a correlation heatmap"
+- "What's the mean sepal length by species?"
+- "Train a model to predict species"
+
+### Safe Code Execution
+- Sandboxed Python execution
+- Blocks dangerous operations
+- Comprehensive error handling
+- Input validation
+
+## 🔧 Available Tools
 
 The agent has access to these tools:
 
-- **`load_dataset`**: Load a dataset (currently supports 'iris')
-- **`get_dataset_info`**: Get information about the current dataset
+- **`load_dataset`**: Load datasets (currently supports 'iris')
+- **`get_dataset_info`**: Get dataset information and statistics
 - **`execute_code`**: Execute Python code on the dataset (available as 'df')
-- **`create_visualization`**: Create visualizations (correlation_heatmap, scatter_plot, histogram)
-- **`get_execution_history`**: Get history of executed code
+- **`create_visualization`**: Generate plots with matplotlib/seaborn
+- **`get_execution_history`**: View history of executed code
 
-## Security Features
+## 📊 Supported Operations
 
-- **Code Safety**: Blocks dangerous operations like file system access, imports, etc.
-- **Sandboxed Execution**: Code runs in a controlled environment
-- **Input Validation**: All inputs are validated before execution
-- **Error Handling**: Comprehensive error handling and reporting
-
-## Supported Operations
-
-### Data Loading and Exploration
-- Load datasets
-- View basic statistics
-- Check data types and missing values
-- Display sample data
+### Data Analysis
+- Load and explore datasets
+- Calculate statistics and summaries
+- Filter and sort data
+- Handle missing values
 
 ### Visualizations
 - Correlation heatmaps
 - Scatter plots
-- Histograms
+- Histograms and distributions
 - Custom matplotlib/seaborn plots
 
 ### Machine Learning
 - Data preprocessing
 - Model training (Logistic Regression, Random Forest)
-- Model evaluation
-- Predictions
+- Model evaluation and metrics
+- Predictions and classifications
 
-### Data Manipulation
-- Filtering and sorting
-- Aggregations
-- Feature engineering
-- Data cleaning
+## 🛠️ Troubleshooting
 
-## Example Workflow
+### Common Issues
 
-1. **Load Dataset**: "Load the iris dataset"
-2. **Explore Data**: "Show me basic information about the dataset"
-3. **Create Visualization**: "Create a correlation heatmap"
-4. **Train Model**: "Train a logistic regression model to predict species"
-5. **Evaluate**: "Show me the model accuracy and classification report"
+1. **"No module named 'flask'"**
+   ```bash
+   pip install flask
+   ```
 
-## Extending the Agent
+2. **Port 5000 in use (macOS)**
+   - The project now uses port 8080 to avoid AirPlay conflicts
+   - If you see port 5000 errors, update to use port 8080
+
+3. **API Key Error**
+   - Ensure `config.py` has your OpenAI API key
+   - Check that the key is valid and has sufficient credits
+
+4. **Browser doesn't open automatically**
+   - The CLI will show the URL: `http://localhost:8080/`
+   - Copy and paste it into your browser
+
+### Debug Mode
+```bash
+python test_agent.py
+```
+This runs comprehensive tests to verify all functionality.
+
+## 🔄 Development Workflow
+
+1. **Make changes** to agent logic in `agent/data_analysis_agent.py`
+2. **Update tools** in `tools/dataset_tools.py` if needed
+3. **Test changes** with `python test_agent.py`
+4. **Test CLI** with `python cli.py chat`
+5. **Use verification.ipynb** for detailed development work
+
+## 📈 Extending the Project
 
 ### Adding New Datasets
-
 1. Add dataset loading function in `tools/dataset_tools.py`
-2. Update the `load_dataset` tool in the agent
+2. Update the `load_dataset` tool in `agent/data_analysis_agent.py`
 3. Test with the CLI
 
-### Adding New Tools
-
-1. Create the tool function in `tools/dataset_tools.py`
-2. Add the tool decorator in the agent
-3. Update the system prompt with tool description
-
 ### Adding New Visualizations
-
 1. Add visualization function in `tools/dataset_tools.py`
 2. Update the `create_visualization` tool
 3. Test with natural language commands
 
-## Troubleshooting
+### Adding New Tools
+1. Create the tool function in `tools/dataset_tools.py`
+2. Add the tool decorator in `agent/data_analysis_agent.py`
+3. Update the system prompt with tool description
 
-### Common Issues
+## 📝 Example Workflow
 
-1. **API Key Error**: Make sure your OpenAI API key is set in `config.py`
-2. **Import Errors**: Install all dependencies with `pip install -r requirements.txt`
-3. **Code Execution Errors**: Check that your code doesn't use restricted operations
-4. **Memory Issues**: Large datasets may require more memory
+1. **Start the CLI**: `python cli.py chat`
+2. **Load data**: "Load the iris dataset"
+3. **Explore**: "Show me basic statistics"
+4. **Visualize**: "Create a correlation heatmap"
+5. **Analyze**: "Train a model to predict species"
+6. **View results**: Browser automatically opens to show plots
 
-### Debug Mode
-
-Run the agent with verbose output:
-
-```python
-from agent.data_analysis_agent import run_agent
-result = run_agent("Your query here")
-print(json.dumps(result, indent=2))
-```
-
-## Contributing
+## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
+4. Test with `python test_agent.py`
+5. Test with `python cli.py chat`
+6. Submit a pull request
 
-## License
+## 📄 License
 
 This project is licensed under the MIT License.
 
-## Support
+---
 
-For issues and questions:
-1. Check the troubleshooting section
-2. Review the example queries
-3. Test with the CLI interface
-4. Open an issue on GitHub 
+**🎯 Remember**: The main entry point is `python cli.py chat` - this gives you the full interactive experience with automatic visualization display! 

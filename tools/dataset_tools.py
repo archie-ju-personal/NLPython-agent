@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import plotly.express as px
 import plotly.graph_objects as go
+import sklearn
 from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
@@ -96,8 +97,8 @@ class DatasetTools:
         
         # Security check - only allow safe operations
         dangerous_keywords = [
-            'import', 'exec', 'eval', 'open', 'file', 'system', 'subprocess',
-            'os.', 'sys.', '__import__', 'globals', 'locals', 'del'
+            'exec', 'eval', 'open', 'file', 'system', 'subprocess',
+            'os.', 'sys.', 'globals', 'locals', 'del'
         ]
         
         code_lower = code.lower()
@@ -126,6 +127,7 @@ class DatasetTools:
                 'str': str,
                 'int': int,
                 'float': float,
+                'sklearn': sklearn,
                 'train_test_split': train_test_split,
                 'StandardScaler': StandardScaler,
                 'LinearRegression': LinearRegression,
@@ -142,8 +144,8 @@ class DatasetTools:
             new_stdout = io.StringIO()
             sys.stdout = new_stdout
             
-            # Execute the code
-            exec(code, {'__builtins__': {}}, local_vars)
+            # Execute the code with import support
+            exec(code, {'__builtins__': {'__import__': __import__}}, local_vars)
             
             # Get the output
             output = new_stdout.getvalue()
@@ -174,87 +176,74 @@ class DatasetTools:
                 'traceback': traceback.format_exc()
             }
     
-    def create_visualization(self, viz_type: str, **kwargs) -> Dict[str, Any]:
-        """Create common visualizations for the dataset."""
+    def create_visualization(self, code: str) -> Dict[str, Any]:
+        """Execute arbitrary Python code to create a visualization and return the plot as PNG bytes."""
         if self.current_dataset is None:
             return {'success': False, 'message': "No dataset loaded"}
-        
         try:
-            if viz_type == "correlation_heatmap":
-                numeric_cols = self.current_dataset.select_dtypes(include=[np.number]).columns
-                if len(numeric_cols) < 2:
-                    return {'success': False, 'message': "Need at least 2 numeric columns for correlation heatmap"}
-                
-                corr_matrix = self.current_dataset[numeric_cols].corr()
-                plt.figure(figsize=(10, 8))
-                sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', center=0)
-                plt.title('Correlation Heatmap')
-                plt.tight_layout()
-                
-                # Save plot to bytes
-                img_buffer = io.BytesIO()
-                plt.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
-                img_buffer.seek(0)
-                plt.close()
-                
-                return {
-                    'success': True,
-                    'message': "Correlation heatmap created successfully",
-                    'plot_data': img_buffer.getvalue()
-                }
-            
-            elif viz_type == "scatter_plot":
-                x_col = kwargs.get('x')
-                y_col = kwargs.get('y')
-                if not x_col or not y_col:
-                    return {'success': False, 'message': "Please specify x and y columns for scatter plot"}
-                
-                plt.figure(figsize=(10, 6))
-                plt.scatter(self.current_dataset[x_col], self.current_dataset[y_col])
-                plt.xlabel(x_col)
-                plt.ylabel(y_col)
-                plt.title(f'Scatter Plot: {x_col} vs {y_col}')
-                plt.grid(True, alpha=0.3)
-                
-                img_buffer = io.BytesIO()
-                plt.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
-                img_buffer.seek(0)
-                plt.close()
-                
-                return {
-                    'success': True,
-                    'message': f"Scatter plot created: {x_col} vs {y_col}",
-                    'plot_data': img_buffer.getvalue()
-                }
-            
-            elif viz_type == "histogram":
-                column = kwargs.get('column')
-                if not column:
-                    return {'success': False, 'message': "Please specify a column for histogram"}
-                
-                plt.figure(figsize=(10, 6))
-                plt.hist(self.current_dataset[column], bins=30, alpha=0.7, edgecolor='black')
-                plt.xlabel(column)
-                plt.ylabel('Frequency')
-                plt.title(f'Histogram of {column}')
-                plt.grid(True, alpha=0.3)
-                
-                img_buffer = io.BytesIO()
-                plt.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
-                img_buffer.seek(0)
-                plt.close()
-                
-                return {
-                    'success': True,
-                    'message': f"Histogram created for {column}",
-                    'plot_data': img_buffer.getvalue()
-                }
-            
-            else:
-                return {'success': False, 'message': f"Unknown visualization type: {viz_type}"}
-                
+            local_vars = {
+                'df': self.current_dataset.copy(),
+                'pd': pd,
+                'np': np,
+                'plt': plt,
+                'sns': sns,
+                'px': px,
+                'go': go,
+                'print': print,
+                'len': len,
+                'range': range,
+                'list': list,
+                'dict': dict,
+                'str': str,
+                'int': int,
+                'float': float,
+                'sklearn': sklearn,
+                'train_test_split': train_test_split,
+                'StandardScaler': StandardScaler,
+                'LinearRegression': LinearRegression,
+                'LogisticRegression': LogisticRegression,
+                'RandomForestClassifier': RandomForestClassifier,
+                'RandomForestRegressor': RandomForestRegressor,
+                'accuracy_score': accuracy_score,
+                'classification_report': classification_report,
+                'confusion_matrix': confusion_matrix
+            }
+            # Prepare to capture stdout and the plot
+            old_stdout = sys.stdout
+            new_stdout = io.StringIO()
+            sys.stdout = new_stdout
+            plt.clf()
+            plt.close('all')
+            # Execute the visualization code with import support
+            exec(code, {'__builtins__': {'__import__': __import__}}, local_vars)
+            # Save the current figure to a buffer
+            img_buffer = io.BytesIO()
+            plt.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
+            img_buffer.seek(0)
+            plt.close('all')
+            output = new_stdout.getvalue()
+            sys.stdout = old_stdout
+            # Optionally update df if modified
+            if 'df' in local_vars and local_vars['df'] is not None:
+                self.current_dataset = local_vars['df']
+            self.execution_history.append({
+                'code': code,
+                'output': output,
+                'timestamp': pd.Timestamp.now()
+            })
+            return {
+                'success': True,
+                'message': "Visualization created successfully",
+                'plot_data': img_buffer.getvalue(),
+                'output': output
+            }
         except Exception as e:
-            return {'success': False, 'message': f"Error creating visualization: {str(e)}"}
+            sys.stdout = old_stdout
+            return {
+                'success': False,
+                'message': f"Error creating visualization: {str(e)}",
+                'traceback': traceback.format_exc()
+            }
     
     def get_execution_history(self) -> List[Dict[str, Any]]:
         """Get the history of executed code."""

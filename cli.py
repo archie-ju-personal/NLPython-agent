@@ -12,6 +12,13 @@ from rich.text import Text
 import json
 from agent.data_analysis_agent import run_agent
 from tools.dataset_tools import dataset_tools
+import os
+import base64
+import sys
+import subprocess
+import threading
+import time
+import webbrowser
 
 app = typer.Typer()
 console = Console()
@@ -34,7 +41,22 @@ def chat():
     
     while True:
         try:
-            user_input = Prompt.ask("\n[bold cyan]You[/bold cyan]")
+            # Check if stdin is interactive
+            if sys.stdin.isatty():
+                # Interactive mode - use rich prompt
+                try:
+                    user_input = Prompt.ask("\n[bold cyan]You[/bold cyan]")
+                except (EOFError, KeyboardInterrupt):
+                    console.print("\n[yellow]Goodbye![/yellow]")
+                    break
+            else:
+                # Non-interactive mode - read from stdin
+                try:
+                    user_input = input().strip()
+                    if not user_input:
+                        break
+                except EOFError:
+                    break
             
             if user_input.lower() in ['quit', 'exit', 'q']:
                 console.print("[yellow]Goodbye![/yellow]")
@@ -74,7 +96,7 @@ def chat():
             elif user_input.lower() == 'reset':
                 result = dataset_tools.reset_dataset()
                 if result['success']:
-                    console.print("[green]Dataset reset successfully![/green]")
+                    console.print("[green]Dataset reset successfully![\/green]")
                 else:
                     console.print(f"[red]{result['message']}[/red]")
                 continue
@@ -99,6 +121,52 @@ def chat():
             # Display the response
             for message in result["final_messages"]:
                 if hasattr(message, 'content') and message.content:
+                    # Try to parse as JSON to check for plot_data
+                    try:
+                        data = json.loads(message.content)
+                        if isinstance(data, dict) and data.get('success') and 'plot_data' in data:
+                            # Save the image
+                            static_dir = os.path.join(os.path.dirname(__file__), 'static')
+                            os.makedirs(static_dir, exist_ok=True)
+                            plot_path = os.path.join(static_dir, 'last_plot.png')
+                            with open(plot_path, 'wb') as f:
+                                # Decode base64 data back to bytes
+                                plot_bytes = base64.b64decode(data['plot_data'])
+                                f.write(plot_bytes)
+                            # Start web server in background if not already running
+                            def start_web_server():
+                                try:
+                                    subprocess.run([sys.executable, "webview.py"], 
+                                                 capture_output=True, timeout=5)
+                                except subprocess.TimeoutExpired:
+                                    pass  # Server started successfully
+                                except Exception:
+                                    pass  # Server might already be running
+                            
+                            # Start server in background thread
+                            server_thread = threading.Thread(target=start_web_server, daemon=True)
+                            server_thread.start()
+                            
+                            # Wait a moment for server to start
+                            time.sleep(1)
+                            
+                            # Try to open browser automatically
+                            try:
+                                webbrowser.open('http://localhost:8080/')
+                                console.print(Panel(
+                                    f"[green]Visualization saved and browser opened![/green]\nIf the browser didn't open, visit [bold blue]http://localhost:8080/[/bold blue]",
+                                    title="Visualization",
+                                    border_style="magenta"
+                                ))
+                            except Exception:
+                                console.print(Panel(
+                                    f"[green]Visualization saved![/green]\nOpen [bold blue]http://localhost:8080/[/bold blue] in your browser to view the latest plot.",
+                                    title="Visualization",
+                                    border_style="magenta"
+                                ))
+                            continue
+                    except Exception:
+                        pass
                     if "AI:" in str(message.content) or "Tool:" in str(message.content):
                         # Skip tool messages in CLI display
                         continue
@@ -108,7 +176,7 @@ def chat():
                             title="AI Response",
                             border_style="blue"
                         ))
-            
+        
         except KeyboardInterrupt:
             console.print("\n[yellow]Goodbye![/yellow]")
             break
