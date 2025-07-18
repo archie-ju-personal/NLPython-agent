@@ -1,11 +1,20 @@
 import json
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Annotated
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, BaseMessage
 from langchain_core.tools import tool
 from langgraph.prebuilt import create_react_agent
+from langgraph.graph import StateGraph, END
 import config
 from tools.dataset_tools import dataset_tools
+import os
+from typing_extensions import TypedDict
+
+# Set up LangSmith tracing
+os.environ["LANGCHAIN_TRACING_V2"] = "true"
+os.environ["LANGCHAIN_API_KEY"] = config.LANGSMITH_API_KEY
+os.environ["LANGCHAIN_PROJECT"] = config.LANGSMITH_PROJECT
+os.environ["LANGCHAIN_ENDPOINT"] = config.LANGSMITH_ENDPOINT
 
 # Initialize the LLM
 llm = ChatOpenAI(
@@ -13,6 +22,15 @@ llm = ChatOpenAI(
     temperature=config.TEMPERATURE,
     api_key=config.OPENAI_API_KEY
 )
+
+# Define the state for Studio compatibility
+class AgentState(TypedDict):
+    messages: Annotated[List[BaseMessage], "The messages in the conversation"]
+    user_query: Annotated[str, "The user's query"]
+    dataset_loaded: Annotated[bool, "Whether a dataset is loaded"]
+    dataset_info: Annotated[Optional[Dict], "Dataset information"]
+    execution_history: Annotated[List[Dict], "History of executed code"]
+    current_step: Annotated[str, "Current step in the workflow"]
 
 # Tool definitions
 @tool
@@ -62,10 +80,8 @@ tools = [load_dataset, get_dataset_info, execute_code, create_visualization, get
 # Create the react agent
 app = create_react_agent(llm, tools)
 
-def run_agent(user_query: str) -> Dict[str, Any]:
-    """Run the agent with a user query."""
-    # Create the system prompt
-    system_prompt = """You are a data analysis AI agent that helps users analyze datasets using Python code.
+# System prompt for the agent
+SYSTEM_PROMPT = """You are a data analysis AI agent that helps users analyze datasets using Python code.
 
 Available tools:
 - load_dataset: Load a dataset (currently supports 'iris')
@@ -92,10 +108,15 @@ IMPORTANT: You can use import statements for any library you need. Common librar
 Always write safe, well-documented Python code. The dataset is available as 'df' in your code.
 Use the pre-loaded libraries: pandas (pd), numpy (np), matplotlib (plt), seaborn (sns), plotly (px, go), and scikit-learn."""
 
+def run_agent(user_query: str) -> Dict[str, Any]:
+    """
+    Run the agent with a user query (CLI interface).
+    Maintains backward compatibility with existing CLI.
+    """
     # Run the agent
     result = app.invoke({
         "messages": [
-            AIMessage(content=system_prompt),
+            AIMessage(content=SYSTEM_PROMPT),
             HumanMessage(content=user_query)
         ]
     })
@@ -104,6 +125,47 @@ Use the pre-loaded libraries: pandas (pd), numpy (np), matplotlib (plt), seaborn
         "final_messages": result["messages"],
         "user_query": user_query
     }
+
+def run_agent_with_state(user_query: str, initial_state: Optional[AgentState] = None) -> AgentState:
+    """
+    Run the agent with state management (Studio interface).
+    Returns full state for LangGraph Studio visualization.
+    """
+    if initial_state is None:
+        # Create initial state
+        initial_state = {
+            "messages": [AIMessage(content=SYSTEM_PROMPT)],
+            "user_query": user_query,
+            "dataset_loaded": False,
+            "dataset_info": None,
+            "execution_history": [],
+            "current_step": "start"
+        }
+    else:
+        # Add the new user query
+        initial_state["user_query"] = user_query
+        initial_state["messages"].append(HumanMessage(content=user_query))
+    
+    # Run the agent
+    result = app.invoke(initial_state)
+    
+    # Update state with results
+    result["dataset_loaded"] = dataset_tools.current_dataset is not None
+    result["dataset_info"] = dataset_tools.dataset_info if dataset_tools.current_dataset is not None else None
+    result["execution_history"] = dataset_tools.get_execution_history()
+    result["current_step"] = "completed"
+    
+    return result
+
+def create_studio_app() -> StateGraph:
+    """
+    Create a LangGraph Studio-compatible app.
+    This provides the same functionality but with state management.
+    """
+    # The app is already created as 'app' above
+    # For Studio compatibility, we can return the same app
+    # or create a custom graph if needed
+    return app
 
 if __name__ == "__main__":
     # Test the agent

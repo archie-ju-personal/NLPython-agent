@@ -10,6 +10,10 @@ from rich.prompt import Prompt
 from rich.table import Table
 from rich.text import Text
 import json
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
 from agent.data_analysis_agent import run_agent
 from tools.dataset_tools import dataset_tools
 import os
@@ -136,12 +140,12 @@ def chat():
                             # Start web server in background if not already running
                             def start_web_server():
                                 try:
-                                    subprocess.run([sys.executable, "webview.py"], 
+                                    subprocess.run([sys.executable, "interfaces/webview.py"], 
                                                  capture_output=True, timeout=5)
                                 except subprocess.TimeoutExpired:
                                     pass  # Server started successfully
-                                except Exception:
-                                    pass  # Server might already be running
+                                except Exception as e:
+                                    console.print(f"[yellow]Warning: Web server may not have started properly: {str(e)}[/yellow]")
                             
                             # Start server in background thread
                             server_thread = threading.Thread(target=start_web_server, daemon=True)
