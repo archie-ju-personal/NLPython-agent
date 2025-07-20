@@ -66,4 +66,7 @@ Thumbs.db
 data/
 
 # API keys and sensitive data
-config.py 
+config.py
+
+# LangGraph Studio runtime files
+.langgraph_api/ 
