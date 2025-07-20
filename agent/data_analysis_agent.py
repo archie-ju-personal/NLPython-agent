@@ -98,12 +98,19 @@ Use the pre-loaded libraries: pandas (pd), numpy (np), matplotlib (plt), seaborn
 # Create a mapping of tool names to tool functions
 tools_by_name = {tool.name: tool for tool in tools}
 
-# Bind tools to the LLM
+# Bind tools to the LLM with system prompt
+from langchain_core.messages import SystemMessage
+
 llm_with_tools = llm.bind_tools(tools)
 
 # Define the agent function
 def call_model(state: MessagesState):
-    response = llm_with_tools.invoke(state["messages"])
+    # Add system message if not present
+    messages = state["messages"]
+    if not messages or not isinstance(messages[0], SystemMessage):
+        messages = [SystemMessage(content=SYSTEM_PROMPT)] + messages
+    
+    response = llm_with_tools.invoke(messages)
     return {"messages": [response]}
 
 # Define the tool function
@@ -179,7 +186,6 @@ def run_agent(user_query: str) -> Dict[str, Any]:
     # Run the agent
     result = app.invoke({
         "messages": [
-            AIMessage(content=SYSTEM_PROMPT),
             HumanMessage(content=user_query)
         ]
     })

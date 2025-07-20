@@ -13,6 +13,9 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
+import statsmodels
 import warnings
 import io
 import sys
@@ -37,23 +40,17 @@ class DatasetTools:
             self.current_dataset['target'] = iris.target
             self.current_dataset['species'] = [iris.target_names[i] for i in iris.target]
             
-            # Create JSON-safe dataset info
-            dtypes_dict = {}
-            for col, dtype in self.current_dataset.dtypes.items():
-                dtypes_dict[str(col)] = str(dtype)
-            
+            # Create minimal dataset info to reduce token usage
             self.dataset_info = {
                 'shape': self.current_dataset.shape,
                 'columns': [str(col) for col in self.current_dataset.columns],
-                'dtypes': dtypes_dict,
-                'missing_values': {str(k): int(v) for k, v in self.current_dataset.isnull().sum().items()},
                 'numeric_columns': [str(col) for col in self.current_dataset.select_dtypes(include=[np.number]).columns],
                 'categorical_columns': [str(col) for col in self.current_dataset.select_dtypes(include=['object']).columns]
             }
             
             return {
                 'success': True,
-                'message': f"Loaded Iris dataset with {self.current_dataset.shape[0]} rows and {self.current_dataset.shape[1]} columns",
+                'message': f"Loaded Iris dataset: {self.current_dataset.shape[0]} rows, {self.current_dataset.shape[1]} columns",
                 'info': self.dataset_info
             }
         except Exception as e:
@@ -69,23 +66,33 @@ class DatasetTools:
         for col, dtype in self.current_dataset.dtypes.items():
             dtypes_dict[str(col)] = str(dtype)
         
-        # Convert describe to a more JSON-friendly format
-        describe_dict = {}
+        # Get only essential statistics to reduce token usage
         if not self.current_dataset.empty:
-            describe = self.current_dataset.describe()
-            for col in describe.columns:
-                describe_dict[str(col)] = {
-                    str(idx): float(val) if not pd.isna(val) else None 
-                    for idx, val in describe[col].items()
-                }
+            numeric_cols = self.current_dataset.select_dtypes(include=[np.number]).columns
+            if len(numeric_cols) > 0:
+                # Get only basic stats for numeric columns
+                basic_stats = self.current_dataset[numeric_cols].describe()
+                stats_dict = {}
+                for col in basic_stats.columns:
+                    stats_dict[str(col)] = {
+                        'count': float(basic_stats[col]['count']),
+                        'mean': float(basic_stats[col]['mean']),
+                        'std': float(basic_stats[col]['std']),
+                        'min': float(basic_stats[col]['min']),
+                        'max': float(basic_stats[col]['max'])
+                    }
+            else:
+                stats_dict = {}
+        else:
+            stats_dict = {}
         
+        # Return optimized info with minimal token usage
         info = {
             'shape': self.current_dataset.shape,
             'columns': [str(col) for col in self.current_dataset.columns],
             'dtypes': dtypes_dict,
             'missing_values': {str(k): int(v) for k, v in self.current_dataset.isnull().sum().items()},
-            'head': self.current_dataset.head().to_dict('records'),
-            'describe': describe_dict
+            'basic_stats': stats_dict
         }
         
         return {'success': True, 'info': info}
@@ -98,16 +105,33 @@ class DatasetTools:
         # Security check - only allow safe operations
         dangerous_keywords = [
             'exec', 'eval', 'open', 'file', 'system', 'subprocess',
-            'os.', 'sys.', 'globals', 'locals', 'del'
+            'globals', 'locals'
         ]
         
+        # Check for dangerous keywords with word boundaries
+        import re
         code_lower = code.lower()
+        
+        # Check for dangerous keywords as complete words
         for keyword in dangerous_keywords:
-            if keyword in code_lower:
+            if re.search(r'\b' + re.escape(keyword) + r'\b', code_lower):
                 return {
                     'success': False, 
                     'message': f"Security: Operation '{keyword}' is not allowed for safety reasons."
                 }
+        
+        # Special checks for module imports (os., sys.)
+        if re.search(r'\bos\.', code_lower):
+            return {
+                'success': False, 
+                'message': "Security: Operation 'os.' is not allowed for safety reasons."
+            }
+        
+        if re.search(r'\bsys\.', code_lower):
+            return {
+                'success': False, 
+                'message': "Security: Operation 'sys.' is not allowed for safety reasons."
+            }
         
         try:
             # Create a safe execution environment
@@ -136,7 +160,10 @@ class DatasetTools:
                 'RandomForestRegressor': RandomForestRegressor,
                 'accuracy_score': accuracy_score,
                 'classification_report': classification_report,
-                'confusion_matrix': confusion_matrix
+                'confusion_matrix': confusion_matrix,
+                'sm': sm,
+                'smf': smf,
+                'statsmodels': statsmodels
             }
             
             # Capture stdout to get print statements
@@ -144,8 +171,11 @@ class DatasetTools:
             new_stdout = io.StringIO()
             sys.stdout = new_stdout
             
+            # Preprocess the code to handle escaped newlines
+            processed_code = code.replace('\\n', '\n')
+            
             # Execute the code with import support
-            exec(code, {'__builtins__': {'__import__': __import__}}, local_vars)
+            exec(processed_code, {'__builtins__': {'__import__': __import__}}, local_vars)
             
             # Get the output
             output = new_stdout.getvalue()
@@ -206,7 +236,10 @@ class DatasetTools:
                 'RandomForestRegressor': RandomForestRegressor,
                 'accuracy_score': accuracy_score,
                 'classification_report': classification_report,
-                'confusion_matrix': confusion_matrix
+                'confusion_matrix': confusion_matrix,
+                'sm': sm,
+                'smf': smf,
+                'statsmodels': statsmodels
             }
             # Prepare to capture stdout and the plot
             old_stdout = sys.stdout
@@ -214,8 +247,11 @@ class DatasetTools:
             sys.stdout = new_stdout
             plt.clf()
             plt.close('all')
+            # Preprocess the code to handle escaped newlines
+            processed_code = code.replace('\\n', '\n')
+            
             # Execute the visualization code with import support
-            exec(code, {'__builtins__': {'__import__': __import__}}, local_vars)
+            exec(processed_code, {'__builtins__': {'__import__': __import__}}, local_vars)
             # Save the current figure to a buffer
             img_buffer = io.BytesIO()
             plt.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
@@ -248,12 +284,13 @@ class DatasetTools:
                 'timestamp': pd.Timestamp.now(),
                 'visualization_file': abs_filepath
             })
+            
+            # Return optimized response with minimal token usage
             return {
                 'success': True,
-                'message': f"Visualization created successfully!\n📊 Saved to: {abs_filepath}\n💡 Open this file to view your plot",
-                'plot_data': img_buffer.getvalue(),
-                'output': output,
-                'file_path': abs_filepath
+                'message': f"Visualization created successfully! Saved to: {abs_filepath}",
+                'file_path': abs_filepath,
+                'output': output
             }
         except Exception as e:
             sys.stdout = old_stdout

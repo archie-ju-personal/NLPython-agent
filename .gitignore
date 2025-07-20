@@ -69,4 +69,4 @@ data/
 config.py
 
 # LangGraph Studio runtime files
-.langgraph_api/ 
+.langgraph_api/ agent-chat-ui/
