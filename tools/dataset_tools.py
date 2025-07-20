@@ -220,22 +220,40 @@ class DatasetTools:
             img_buffer = io.BytesIO()
             plt.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
             img_buffer.seek(0)
+            
+            # Also save to file for viewing (LangGraph Studio enhancement)
+            import os
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"visualization_{timestamp}.png"
+            filepath = os.path.join("static", "visualizations", filename)
+            
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
+            
+            # Save to file
+            plt.savefig(filepath, format='png', dpi=300, bbox_inches='tight')
             plt.close('all')
+            
             output = new_stdout.getvalue()
             sys.stdout = old_stdout
             # Optionally update df if modified
             if 'df' in local_vars and local_vars['df'] is not None:
                 self.current_dataset = local_vars['df']
+            
+            abs_filepath = os.path.abspath(filepath)
             self.execution_history.append({
                 'code': code,
                 'output': output,
-                'timestamp': pd.Timestamp.now()
+                'timestamp': pd.Timestamp.now(),
+                'visualization_file': abs_filepath
             })
             return {
                 'success': True,
-                'message': "Visualization created successfully",
+                'message': f"Visualization created successfully!\n📊 Saved to: {abs_filepath}\n💡 Open this file to view your plot",
                 'plot_data': img_buffer.getvalue(),
-                'output': output
+                'output': output,
+                'file_path': abs_filepath
             }
         except Exception as e:
             sys.stdout = old_stdout

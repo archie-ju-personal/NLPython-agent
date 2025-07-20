@@ -1,14 +1,13 @@
 import json
-from typing import Dict, Any, List, Optional, Annotated
+from typing import Dict, Any, List, Optional, Annotated, Sequence
+import operator
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, BaseMessage
 from langchain_core.tools import tool
-from langgraph.prebuilt import create_react_agent
-from langgraph.graph import StateGraph, END
+from langgraph.graph import StateGraph, END, START, MessagesState
 import config
 from tools.dataset_tools import dataset_tools
 import os
-from typing_extensions import TypedDict
 
 # Set up LangSmith tracing
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
@@ -22,15 +21,6 @@ llm = ChatOpenAI(
     temperature=config.TEMPERATURE,
     api_key=config.OPENAI_API_KEY
 )
-
-# Define the state for Studio compatibility
-class AgentState(TypedDict):
-    messages: Annotated[List[BaseMessage], "The messages in the conversation"]
-    user_query: Annotated[str, "The user's query"]
-    dataset_loaded: Annotated[bool, "Whether a dataset is loaded"]
-    dataset_info: Annotated[Optional[Dict], "Dataset information"]
-    execution_history: Annotated[List[Dict], "History of executed code"]
-    current_step: Annotated[str, "Current step in the workflow"]
 
 # Tool definitions
 @tool
@@ -77,9 +67,6 @@ def get_execution_history() -> str:
 # Create the tools list
 tools = [load_dataset, get_dataset_info, execute_code, create_visualization, get_execution_history]
 
-# Create the react agent
-app = create_react_agent(llm, tools)
-
 # System prompt for the agent
 SYSTEM_PROMPT = """You are a data analysis AI agent that helps users analyze datasets using Python code.
 
@@ -108,6 +95,82 @@ IMPORTANT: You can use import statements for any library you need. Common librar
 Always write safe, well-documented Python code. The dataset is available as 'df' in your code.
 Use the pre-loaded libraries: pandas (pd), numpy (np), matplotlib (plt), seaborn (sns), plotly (px, go), and scikit-learn."""
 
+# Create a mapping of tool names to tool functions
+tools_by_name = {tool.name: tool for tool in tools}
+
+# Bind tools to the LLM
+llm_with_tools = llm.bind_tools(tools)
+
+# Define the agent function
+def call_model(state: MessagesState):
+    response = llm_with_tools.invoke(state["messages"])
+    return {"messages": [response]}
+
+# Define the tool function
+def call_tool(state: MessagesState):
+    messages = state["messages"]
+    last_message = messages[-1]
+    
+    tool_messages = []
+    for tool_call in last_message.tool_calls:
+        tool_name = tool_call["name"]
+        tool_input = tool_call["args"]
+        
+        # Get the tool function
+        tool_func = tools_by_name[tool_name]
+        
+        try:
+            # Call the tool
+            result = tool_func.invoke(tool_input)
+        except Exception as e:
+            result = f"Error calling tool {tool_name}: {str(e)}"
+        
+        # Create tool message
+        tool_message = ToolMessage(
+            content=str(result),
+            name=tool_name,
+            tool_call_id=tool_call["id"],
+        )
+        tool_messages.append(tool_message)
+
+    return {"messages": tool_messages}
+
+# Define condition for calling tools
+def should_continue(state: MessagesState):
+    messages = state["messages"]
+    last_message = messages[-1]
+    # If there are no tool calls, then we finish
+    if not hasattr(last_message, 'tool_calls') or not last_message.tool_calls:
+        return END
+    else:
+        return "tools"
+
+# Build the graph
+workflow = StateGraph(MessagesState)
+
+# Add the agent node
+workflow.add_node("agent", call_model)
+workflow.add_node("tools", call_tool)
+
+# Set the entrypoint
+workflow.add_edge(START, "agent")
+
+# Add conditional edges
+workflow.add_conditional_edges(
+    "agent",
+    should_continue,
+    {
+        "tools": "tools",
+        END: END,
+    }
+)
+
+# Add edge from tools to agent
+workflow.add_edge("tools", "agent")
+
+# Compile the workflow
+app = workflow.compile()
+
 def run_agent(user_query: str) -> Dict[str, Any]:
     """
     Run the agent with a user query (CLI interface).
@@ -125,6 +188,17 @@ def run_agent(user_query: str) -> Dict[str, Any]:
         "final_messages": result["messages"],
         "user_query": user_query
     }
+
+# Legacy state definition for backward compatibility
+from typing_extensions import TypedDict
+
+class AgentState(TypedDict):
+    messages: Annotated[List[BaseMessage], "The messages in the conversation"]
+    user_query: Annotated[str, "The user's query"]
+    dataset_loaded: Annotated[bool, "Whether a dataset is loaded"]
+    dataset_info: Annotated[Optional[Dict], "Dataset information"]
+    execution_history: Annotated[List[Dict], "History of executed code"]
+    current_step: Annotated[str, "Current step in the workflow"]
 
 def run_agent_with_state(user_query: str, initial_state: Optional[AgentState] = None) -> AgentState:
     """
@@ -162,9 +236,6 @@ def create_studio_app() -> StateGraph:
     Create a LangGraph Studio-compatible app.
     This provides the same functionality but with state management.
     """
-    # The app is already created as 'app' above
-    # For Studio compatibility, we can return the same app
-    # or create a custom graph if needed
     return app
 
 if __name__ == "__main__":

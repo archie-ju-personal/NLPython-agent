@@ -14,6 +14,9 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from agent.data_analysis_agent import app, AgentState, SYSTEM_PROMPT
 
+# Export app for LangGraph Studio
+app = app
+
 # For LangGraph Studio compatibility
 if __name__ == "__main__":
     # Test the app
